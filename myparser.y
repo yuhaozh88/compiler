@@ -84,8 +84,11 @@ void getType(TreeNode* root,string& type)
 			getType((root->child[i]),type);
 		} else {
 			if ((root->kind).exp!=IdK && root->type != NULL){
-				type+=root->type;
+				type += root->type;
+				type += ",";
 				return;
+			} else if ((root->kind).exp == IdK){
+				type += "@";
 			} else {
 				return ;
 			}
@@ -102,7 +105,7 @@ void getIDs(TreeNode* root, vector<string>& tempTable)
 				if (tempTable.size()!=0){
 					for (int i=0;i<tempTable.size();i++){
 						if (tempTable[i]==(root->attr.name)){
-							cout<<"DUPLICATE IDENTIFIER!";
+							//cout<<"DUPLICATE IDENTIFIER!";
 							return ;
 						}
 					}
@@ -120,16 +123,51 @@ void getIDs(TreeNode* root, vector<string>& tempTable)
 };
 void findDeclaration(TreeNode* root, vector<TreeNode*>& declarations)
 {
+	
 	for (int i=0;i<MAXCHILDREN;++i){
-		if (root->child[i] && (root->child[i])->kind.exp == DeclarationK){
+		if (root->child[i] && ((root->child[i])->kind.exp == DeclarationK || (root->child[i])->kind.exp == ParamDeclarationK)){
 			declarations.push_back(root->child[i]);
-		} else if (root->child[i] && (root->child[i])->kind.exp != DeclarationK){
+		} else if (root->child[i] && (root->child[i])->kind.exp != DeclarationK && (root->child[i])->kind.exp != ParamDeclarationK){
 			findDeclaration(root->child[i],declarations);
 		} else {
 			return;
 		}
 	}
-}
+};
+void findParamsDeclaration(TreeNode* root, vector<TreeNode*>& declarations)
+{
+	for (int i=0;i<MAXCHILDREN;++i){
+		if (root->child[i] && (root->child[i])->kind.stmt == ParamDeclarationK){
+			declarations.push_back(root->child[i]);
+		} else if(root->child[i] && (root->child[i])->kind.stmt != ParamDeclarationK){
+			findParamsDeclaration(root->child[i],declarations);
+		} else {
+			return ;
+		}
+	}
+};
+void findFunction(TreeNode* root, vector<TreeNode*>& functions)
+{
+	if (root && root->kind.stmt == FunctionDefinitionK){
+		functions.push_back(root);
+	}
+	for (int i=0;i<MAXCHILDREN;++i){
+	/*
+		if (root->child[i] && (root->child[i])->kind.stmt == FunctionDefinitionK){
+			functions.push_back(root->child[i]);
+		} else if (root->child[i] && (root->child[i]->kind.stmt != FunctionDefinitionK)){
+			findFunction(root->child[i],functions);
+		} else {
+			return ;
+		}
+	*/
+		if (root->child[i]){
+			findFunction(root->child[i],functions);
+		} else {
+			return ;
+		}
+	}
+};
 void moveDown()
 {
 	fatherTable = presentTable;
@@ -152,7 +190,7 @@ void setTable(TreeNode* root)
 		} 
 	}
 };
-void addIDs(Table* present, string type, vector<string>& tempTable )
+void addIDs(Table* present, string type, vector<string>& tempTable)
 {
 	for (int i=0;i<tempTable.size();++i){
 	/*
@@ -163,20 +201,75 @@ void addIDs(Table* present, string type, vector<string>& tempTable )
 		(present->Identifiers).insert(make_pair(tempTable[i],type));
 	}
 };
-void createTable(TreeNode* root)
+void addFunctionsID(Table* present, string type, vector<string>& tempTable)
 {
-	vector<TreeNode*> declarations;
-	findDeclaration(root,declarations);
-	for (int i=0;i<declarations.size();++i){
-		string type = "";
-		vector<string> tempTable;
-		getType(declarations[i],type);
-		getIDs(declarations[i],tempTable);
-		for (int j=0;j<tempTable.size();++j){
-			addIDs(presentTable,type,tempTable);
+	(present->Identifiers).insert(make_pair(tempTable[0],type));
+};
+string cutString(string& str)
+{
+	string result = "";
+	for (int i=0;i<str.size();++i){
+		if (str[i] != '@'){
+			result += str[i];
+		} else {
+			break;
 		}
 	}
-	setTable(root);
+	return result;
+}
+void createTable(TreeNode* root)
+{//此函数在两种情况下会被调用，一种是在复合语句，一种是函数声明
+	
+	vector<TreeNode*> functions;
+	findFunction(root,functions);
+	if (functions.size() == 0){
+		//在检测到复合语句时调用此函数
+		vector<TreeNode*> declarations;
+		findDeclaration(root,declarations);
+		for (int i=0;i<declarations.size();++i){
+			string type = "";
+			string tempType = "";
+			vector<string> tempTable;
+			getType(declarations[i],tempType);
+			type = cutString(tempType);
+			getIDs(declarations[i],tempTable);
+			for (int j=0;j<tempTable.size();++j){
+				addIDs(presentTable,type,tempTable);
+			}
+		}
+		setTable(root);
+	} else {
+		for (int k=0;k<functions.size();++k){
+			vector<string> functionName;//获得function declaration子节点中所有的identifier，保留第一个就是function的名字
+			vector<TreeNode*> paramsDeclaration;//获取所有的函数参数定义节点
+			string tempType = "";
+			string returnType = "";//保存函数的返回值类型
+			string paramsType = "";//保存函数的参数类型
+			string functionType = "";//函数的类型由返回值和参数类型共同决定
+			getType(functions[k],tempType);//获取当前函数的返回值
+			returnType = cutString(tempType);
+			functionType += returnType + "/";
+			findParamsDeclaration(functions[k],paramsDeclaration);//获取当前函数声明的参数声明语句
+			getType(paramsDeclaration[0],paramsType);//每个函数声明只可能有一个参数声明，所以直接获取第一个元素即可
+			paramsType = cutString(paramsType);
+			functionType = functionType + paramsType;
+			getIDs(functions[k],functionName);
+			addFunctionsID(presentTable,functionType,functionName);
+			vector<TreeNode*> declarations;
+			findDeclaration(functions[k],declarations);
+			for (int i=0;i<declarations.size();++i){
+				vector<string> tempTable;
+				string type = "";
+				getType(declarations[i],type);
+				type = cutString(type);
+				getIDs(declarations[i],tempTable);
+				for (int j=0;j<tempTable.size();++j){
+					addIDs(presentTable,type,tempTable);
+				}
+			}
+			setTable(functions[k]);
+		}
+	}
 };
 
 void moveUp()
@@ -191,9 +284,9 @@ void moveUp()
 
 bool traverseIDs(TreeNode* id)
 {
-	if (id->attr.name!=NULL && !strcmp(id->attr.name,"main") && id->nodenum==1){
+	/*if (id->attr.name!=NULL && !strcmp(id->attr.name,"main") && id->nodenum==1){
 		return true;
-	}
+	}*/
 	if (id->table == NULL){
 		cout<<"INIT WRONG!"<<endl;
 	} else {
@@ -662,10 +755,10 @@ external_declaration
 	;
 
 function_definition
-	: declaration_specifiers declarator declaration_list compound_statement		{$$ = NewStmtNode(FunctionDefinitionK,$1,$2,$3,$4);}
-	| declaration_specifiers declarator compound_statement	{$$ = NewStmtNode(FunctionDefinitionK,$1,$2,$3);}
-	| declarator declaration_list compound_statement	{$$ = NewStmtNode(FunctionDefinitionK,$1,$2,$3);}
-	| declarator compound_statement		{$$ = NewStmtNode(FunctionDefinitionK,$1,$2);}
+	: declaration_specifiers declarator declaration_list compound_statement		{$$ = NewStmtNode(FunctionDefinitionK,$1,$2,$3,$4);moveDown();createTable($$);moveUp();}
+	| declaration_specifiers declarator compound_statement	{$$ = NewStmtNode(FunctionDefinitionK,$1,$2,$3);moveDown();createTable($$);moveUp();}
+	| declarator declaration_list compound_statement	{$$ = NewStmtNode(FunctionDefinitionK,$1,$2,$3);moveDown();createTable($$);moveUp();}
+	| declarator compound_statement		{$$ = NewStmtNode(FunctionDefinitionK,$1,$2);moveDown();createTable($$);moveUp();}
 	;
 
 translation_unit
