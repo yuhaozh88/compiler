@@ -39,7 +39,7 @@ class Table
 };
 Table* presentTable;
 Table* fatherTable;
-Table* global;
+map<string,string> functionMap;
 
 
 typedef struct treeNode
@@ -245,6 +245,8 @@ void createTable(TreeNode* root)
 			paramsType = cutString(paramsType);
 			functionType = functionType + paramsType;
 			getIDs(functions[k],functionName);
+			string name = functionName[0];
+			functionMap.insert(make_pair(name,functionType));
 			addFunctionsID(presentTable,functionType,functionName);
 			vector<TreeNode*> declarations;
 			findDeclaration(functions[k],declarations);
@@ -1454,10 +1456,14 @@ void traverse(TreeNode* root)
 		} else{
 			if (root->nodekind == ExpK && root->kind.exp == IdK){
 				string type = "";
+				auto it = functionMap.find(root->attr.name);
 				if (traverseIDs(root,type)){
 					cout << type <<endl;
 					PrintNode(root);
 					return;
+				} else if (it != functionMap.end()){
+					PrintNode(root);
+					return ;
 				} else {
 					cout<<"WRONG IDENTIFIER!"<<endl;
 					return;
@@ -1531,6 +1537,31 @@ void SetType(TreeNode* node,char* type)
     }
 };
 
+void getParamsList(TreeNode* root, vector<int>& list)
+{
+	if (root == NULL){
+		return ;
+	}
+	for (int i=0;i<MAXCHILDREN;++i){
+		if (root->child[i]){
+			getParamsList(root->child[i],list);
+		} else {
+			if (root->nodekind == ExpK && root->kind.exp == IdK){
+				string type = "";
+				traverseIDs(root,type);
+				int score = calculateType(type);
+				list.push_back(score);
+			} else if (root->nodekind == ExpK && root->kind.exp == ConstantK){
+				list.push_back(CONSTVALUE + INTVALUE);
+			} else if (root->nodekind == ExpK && root->kind.exp == FConstantK){
+				list.push_back(CONSTVALUE + FLOATVALUE);
+			} else if (root->nodekind == ExpK && root->kind.exp == CConstantK){
+				list.push_back(CONSTVALUE + CHARVALUE);
+			}
+		}
+	}
+};
+
 int checkOperandType(TreeNode* node)
 {
 	if (node == NULL){
@@ -1543,8 +1574,16 @@ int checkOperandType(TreeNode* node)
 	} else if (node->nodekind == ExpK && node->kind.exp == CConstantK){
 		return (CONSTVALUE + CHARVALUE);
 	} else if (node->nodekind == ExpK && node->kind.exp == IdK){
-		string type = "";
-		traverseIDs(node,type);
+		auto it = functionMap.find(node->attr.name);
+		if (it == functionMap.end()){//普通ID
+			string type = "";
+			traverseIDs(node,type);
+			return calculateType(type);
+		}
+		string type = it->second;
+		int index = type.find('/');
+		type = type.substr(0,index);
+		cout << "function type:" << type << endl;
 		return calculateType(type);
 	} else if(node->nodekind == ExpK && node->kind.exp == OpK  && node->child[0] && node->child[1] == NULL){//单目运算
 		int check = checkOperandType(node->child[0]);
@@ -1635,7 +1674,51 @@ int checkOperandType(TreeNode* node)
 				return -(node->lineno);
 			}
 			return (check1 - POINTERVALUE);
-		} 
+		} else if (node->attr.op == '('){//函数调用
+			if (!node->child[0]){//函数调用缺少函数名
+				return -(node->lineno);
+			}
+			auto it = functionMap.find(node->child[0]->attr.name);
+			if (it == functionMap.end()){
+				return -(node->lineno);
+			}
+			string name = node->child[0]->attr.name;//从全局函数表中获取函数名
+			string type = it->second;//从全局变量中获取函数的参数信息
+			int index = type.find('/');
+			string returnType = type.substr(0,index-1);
+			string paramsType = "";
+			vector<string> paramsList;
+			for (int i=index+1;i<type.length();++i){
+				if (type[i] != ' '){
+					paramsType += type[i];
+				} else {
+					paramsList.push_back(paramsType);
+					paramsType = "";
+				}
+			}
+			if (!node->child[1]){//调用时无参数
+				if (paramsList.size() != 0){//与函数声明不匹配
+					return -(node->lineno);
+				} else {
+					return calculateType(returnType);
+				}
+			} else {//调用时有参数
+				vector<int> list;
+				getParamsList(node->child[1],list);
+				if (paramsList.size() != list.size()){
+					return -(node->lineno);
+				} else {
+					int size = paramsList.size();
+					for (int i=0;i<size;++i){
+						int score = calculateType(paramsList[i]);
+						if (score != list[i] && score != list[i] - CONSTVALUE && score != list[i] + CONSTVALUE){
+							return -(node->lineno);
+						}
+					}
+					return calculateType(returnType);
+				}
+			}
+		}
 	}
 };
 
