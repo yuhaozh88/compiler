@@ -13,6 +13,8 @@ Date: 2017Äê11ÔÂ30ÈÕ
 #include <vector>
 char* AllType[] = {"int","char","short","long","bool"};
 int value;
+float f_value;
+char c_value;
 char* identifier;
 int index = -1;
 int lineno = 1;
@@ -122,11 +124,11 @@ IS			(u|U|l|L)*
 0[xX]{H}+{IS}?		{value = atoi(yytext); return(CONSTANT);}
 0{D}+{IS}?		{value = atoi(yytext); return(CONSTANT);}
 {D}+{IS}?		{value = atoi(yytext); return(CONSTANT);}
-L?'(\\.|[^\\'])+'	{value = atoi(yytext);return(CONSTANT);}
+'[a-zA-Z]'	{char * temp = new char[strlen(yytext)];strcpy(temp,yytext);c_value = temp[1];return(CCONSTANT);}
 
-{D}+{E}{FS}?		{return(CONSTANT);}
-{D}*"."{D}+({E})?{FS}?	{return(CONSTANT);}
-{D}+"."{D}*({E})?{FS}?	{return(CONSTANT);}
+{D}+{E}{FS}?		{f_value = atof(yytext);return(FCONSTANT);}
+{D}*"."{D}+({E})?{FS}?	{f_value = atof(yytext);return(FCONSTANT);}
+{D}+"."{D}*({E})?{FS}?	{f_value = atof(yytext);return(FCONSTANT);}
 
 L?\"(\\.|[^\\"])*\"	{str = yytext; return(STRING_LITERAL);}
 

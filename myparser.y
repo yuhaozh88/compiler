@@ -12,14 +12,22 @@ Date: 2017年11月30日
 #include <string>
 #include <cstring>
 #include <vector>
+#include <algorithm>
 using namespace std;
 
 typedef enum { StmtK, ExpK} NodeKind;
-typedef enum { LabeledK, IfK,SwitchK, DowhileK, WhileK, CompK, JumpK, ForK, InputK, PrintK, DeclarationK, FunctionDefinitionK, ExpressionListK, InitDeclaratorK, AssignmentListK,ConstantExpressionK,DeclarationSpecifiersK,InitDeclaratorListK,SuSpecifierK,StructDeclarationListK,StructDeclarationK,SqListK,StructDeclaratorListK,StructDeclaratorK,EnumSpecifierK,EnumListK,DeclaratorK,DirectDeclaratorK,TypeQualifierListK,ParamTypeListK,ParamListK,ParamDeclarationK,TypeNameK,DirectAbstractDeclaratorK,AbstractDeclaratorK,InitializerK,InitializerListK,DeclarationListK,StatementListK,TranslationUnitK,IdentifierListK,EmptyK,ExternalDeclarationK} StmtKind;
-typedef enum { OpK, IdK, TypeSpecifierK , PointK, ConstantK, StringK, PostfixK, CastK, AssignmentK, StorageSpecifierK, StructUnionSpecifierK, EnumK, TypeQualifierK, LabelSpecifierK, JumpSpecifierK,MainK} ExpKind;
+typedef enum { LabeledK, IfK,SwitchK, DowhileK, WhileK, CompK, JumpK, ForK, InputK, PrintK, DeclarationK, FunctionDefinitionK, ExpressionListK, InitDeclaratorK, AssignmentListK,ConstantExpressionK,DeclarationSpecifiersK,InitDeclaratorListK,SuSpecifierK,StructDeclarationListK,StructDeclarationK,SqListK,StructDeclaratorListK,StructDeclaratorK,EnumSpecifierK,EnumListK,DeclaratorK,DirectDeclaratorK,ArrayK,TypeQualifierListK,ParamTypeListK,ParamListK,ParamDeclarationK,TypeNameK,DirectAbstractDeclaratorK,AbstractDeclaratorK,InitializerK,InitializerListK,DeclarationListK,StatementListK,TranslationUnitK,IdentifierListK,EmptyK,ExternalDeclarationK} StmtKind;
+typedef enum { OpK, IdK, TypeSpecifierK , PointK, ConstantK, FConstantK, CConstantK, StringK, PostfixK, CastK, AssignmentK, StorageSpecifierK, StructUnionSpecifierK, EnumK, TypeQualifierK, LabelSpecifierK, JumpSpecifierK,TruthValueK} ExpKind;
 typedef enum { Enum,Int, Char, Bool,Void,Typedef,Extern,Auto,Static,Register,Short,Long,Signed,Unsigned,Struct,Union,Const,Volatile,Continue,Break,Return,Case,Default,Float} ExpType;
 
 #define MAXCHILDREN 4
+#define CHARVALUE 1
+#define INTVALUE 2
+#define FLOATVALUE 4
+#define POINTERVALUE 8
+//#define ARRAYVALUE 16
+#define CONSTVALUE 32
+
 int NodeNum;
 class Table
 {
@@ -33,40 +41,28 @@ Table* presentTable;
 Table* fatherTable;
 Table* global;
 
+
 typedef struct treeNode
 {
 	struct treeNode* child[MAXCHILDREN];
 	int lineno;
 	NodeKind nodekind;
 	union {StmtKind stmt; ExpKind exp;} kind;
-	union {int op; int val; char* name; string str;} attr;
+	union {int op; int val; char* name; string str;float f_val;char c_val;} attr;
 	char* type;
 	Table* table;
 	int nodenum;
 	
 }TreeNode;
-/*
-class ID
-{
-	public:
-		char* id;
-		char* type;
-	public:
-		bool operator <(const ID& temp)const
-		{
-			return (this->id < temp.id);
-		}
-		bool operator =(const ID& temp)const
-		{
-			return !strcmp(this->id,temp.id) & !strcmp(this->type,temp.type);
-		}
-};
-*/
+
 TreeNode * NewStmtNode(StmtKind kind, TreeNode* child1 = NULL, TreeNode* child2 = NULL, TreeNode*child3 = NULL, TreeNode*child4 = NULL);
 TreeNode * NewExpNode(ExpKind kind, TreeNode* child1 = NULL, TreeNode* child2 = NULL, TreeNode*child3 = NULL, TreeNode*child4 = NULL);
 void SetType(TreeNode* node, char* type);
 void PrintNode(TreeNode* node); 
 void PrintOP(int);
+int checkOperandType(TreeNode* node);
+void checkType(TreeNode* node);
+
 void add(char*& a,char* b)
 {
 	int length = strlen(a)+strlen(b);
@@ -79,13 +75,20 @@ void add(char*& a,char* b)
 
 void getType(TreeNode* root,string& type)
 {
+	if (root->nodekind == StmtK && root->kind.stmt == ArrayK){
+		type += "array";
+		type += " ";
+	}
 	for (int i=0;i<MAXCHILDREN;++i){
 		if (root->child[i]){
 			getType((root->child[i]),type);
 		} else {
 			if ((root->kind).exp!=IdK && root->type != NULL){
-				type += root->type;
-				type += ",";
+				char* temp = new char [strlen(root->type)];
+				strcpy(temp,root->type);
+				temp = _strlwr(temp);
+				type += temp;
+				type += " ";
 				return;
 			} else if ((root->kind).exp == IdK){
 				type += "@";
@@ -152,15 +155,6 @@ void findFunction(TreeNode* root, vector<TreeNode*>& functions)
 		functions.push_back(root);
 	}
 	for (int i=0;i<MAXCHILDREN;++i){
-	/*
-		if (root->child[i] && (root->child[i])->kind.stmt == FunctionDefinitionK){
-			functions.push_back(root->child[i]);
-		} else if (root->child[i] && (root->child[i]->kind.stmt != FunctionDefinitionK)){
-			findFunction(root->child[i],functions);
-		} else {
-			return ;
-		}
-	*/
 		if (root->child[i]){
 			findFunction(root->child[i],functions);
 		} else {
@@ -193,11 +187,6 @@ void setTable(TreeNode* root)
 void addIDs(Table* present, string type, vector<string>& tempTable)
 {
 	for (int i=0;i<tempTable.size();++i){
-	/*
-		char* ttype = new char[strlen(type)];
-		char* telement = new char[strlen(tempTable[i])];
-		strcpy(ttype,type);
-		strcpy(telement,tempTable[i]);*/
 		(present->Identifiers).insert(make_pair(tempTable[i],type));
 	}
 };
@@ -250,7 +239,9 @@ void createTable(TreeNode* root)
 			returnType = cutString(tempType);
 			functionType += returnType + "/";
 			findParamsDeclaration(functions[k],paramsDeclaration);//获取当前函数声明的参数声明语句
-			getType(paramsDeclaration[0],paramsType);//每个函数声明只可能有一个参数声明，所以直接获取第一个元素即可
+			if (paramsDeclaration.size() != 0){
+				getType(paramsDeclaration[0],paramsType);//每个函数声明只可能有一个参数声明，所以直接获取第一个元素即可
+			}
 			paramsType = cutString(paramsType);
 			functionType = functionType + paramsType;
 			getIDs(functions[k],functionName);
@@ -282,11 +273,8 @@ void moveUp()
 };
 
 
-bool traverseIDs(TreeNode* id)
+bool traverseIDs(TreeNode* id, string& type)
 {
-	/*if (id->attr.name!=NULL && !strcmp(id->attr.name,"main") && id->nodenum==1){
-		return true;
-	}*/
 	if (id->table == NULL){
 		cout<<"INIT WRONG!"<<endl;
 	} else {
@@ -295,6 +283,7 @@ bool traverseIDs(TreeNode* id)
 			map<string,string> identifiers = table->Identifiers;
 			auto it = identifiers.find((id->attr).name);
 			if (it != identifiers.end()){
+				type += it->second;
 				return true;
 			} else {
 				table = table->upTable;
@@ -304,12 +293,72 @@ bool traverseIDs(TreeNode* id)
 	}
 };
 
+int getTimes(string type,string specifier)
+{
+	int len = specifier.length();
+	int times = 0;
+	int index = type.find(specifier);
+	while (index != -1){
+		times ++;
+		if ((index + len) >= type.size()){
+			return times;
+		}
+		type = type.substr(index + len);
+		index = type.find(specifier);
+	}
+	return times;
+};
+
+int calculateType(string type)
+{
+	string Const = "const";
+	string Char = "char";
+	string Int = "int";
+	string Float = "float";
+	string Pointer = "*";
+	string Array = "array";
+	int score = 0;
+	string::size_type check;
+
+	check = type.find(Const);
+	if (check != string::npos){
+		score += CONSTVALUE;
+	}
+	cout << score << " " ;
+	check = type.find(Float);
+	if (check != string::npos){
+		score += FLOATVALUE;
+	}
+	cout << score << " " ;
+	check = type.find(Int);
+	if (check != string::npos){
+		score += INTVALUE;
+	}
+	cout << score << " " ;
+	check = type.find(Char);
+	if (check != string::npos){
+		score += CHARVALUE;
+	}
+	cout << score << " " ;
+	int times = getTimes(type,Pointer);
+	score += times * POINTERVALUE;
+	cout << score << " " ;
+	times = getTimes(type,Array);
+	score += times * POINTERVALUE;
+	cout << score << " " ;
+	return score;
+
+};
+
+
 
 
 
 TreeNode* parsetree;
 extern int lineno;
 extern int value;
+extern float f_value;
+extern char c_value;
 extern vector<char*> idVector;
 extern int index;
 extern string str;
@@ -344,7 +393,7 @@ extern string str;
 }
 
 // place any declarations here
-%token IDENTIFIER CONSTANT STRING_LITERAL SIZEOF BOOL
+%token IDENTIFIER CONSTANT FCONSTANT CCONSTANT STRING_LITERAL SIZEOF BOOL
 %token PTR_OP INC_OP DEC_OP LEFT_OP RIGHT_OP LE_OP GE_OP EQ_OP NE_OP
 %token AND_OP OR_OP MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN ADD_ASSIGN
 %token SUB_ASSIGN LEFT_ASSIGN RIGHT_ASSIGN AND_ASSIGN
@@ -371,6 +420,8 @@ extern string str;
 primary_expression
 	: IDENTIFIER		{$$ = NewExpNode(IdK);$$->attr.name = idVector[index];}
 	| CONSTANT			{$$ = NewExpNode(ConstantK);$$->attr.val = value;}
+	| FCONSTANT			{$$ = NewExpNode(FConstantK);$$->attr.f_val = f_value;}
+	| CCONSTANT			{$$ = NewExpNode(CConstantK);$$->attr.c_val = c_value;}
 	| STRING_LITERAL	{$$ = NewExpNode(StringK);$$->attr.str = str;}
 	| '(' expression ')'{$$ = $2;}
 	;
@@ -388,11 +439,11 @@ postfix_expression
 
 argument_expression_list
 	: assignment_expression		{$$ = $1;}
-	| argument_expression_list ',' assignment_expression	{NewStmtNode(AssignmentListK,$1,$3);}
+	| argument_expression_list ',' assignment_expression	{$$ = NewStmtNode(AssignmentListK,$1,$3);}
 	;
 
 unary_expression
-	: postfix_expression		{$$ = NewExpNode(OpK,$1);$$->attr.op = ' ';}
+	: postfix_expression		{$$ = $1;}
 	| INC_OP unary_expression	{$$ = NewExpNode(OpK,$2);$$->attr.op = INC_OP;}
 	| DEC_OP unary_expression	{$$ = NewExpNode(OpK,$2);$$->attr.op = DEC_OP;}
 	| '&' cast_expression		{$$ = NewExpNode(OpK,$2);$$->attr.op = '&';}
@@ -430,46 +481,46 @@ shift_expression
 
 relational_expression
 	: shift_expression		{$$ = $1;}
-	| relational_expression '<' shift_expression		{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = '<';}
-	| relational_expression '>' shift_expression		{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = '>';}
-	| relational_expression LE_OP shift_expression		{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = LE_OP;}
-	| relational_expression GE_OP shift_expression		{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = GE_OP;}
+	| relational_expression '<' shift_expression		{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = '<';}
+	| relational_expression '>' shift_expression		{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = '>';}
+	| relational_expression LE_OP shift_expression		{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = LE_OP;}
+	| relational_expression GE_OP shift_expression		{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = GE_OP;}
 	;
 
 equality_expression
 	: relational_expression		{$$ = $1;}
-	| equality_expression EQ_OP relational_expression	{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = EQ_OP;}
-	| equality_expression NE_OP relational_expression	{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = NE_OP;}
+	| equality_expression EQ_OP relational_expression	{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = EQ_OP;}
+	| equality_expression NE_OP relational_expression	{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = NE_OP;}
 	;
 
 and_expression
 	: equality_expression		{$$ = $1;}
-	| and_expression '&' equality_expression		{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = '&';}
+	| and_expression '&' equality_expression		{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = '&';}
 	;
 
 exclusive_or_expression
 	: and_expression			{$$ = $1;}
-	| exclusive_or_expression '^' and_expression	{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = '^';}
+	| exclusive_or_expression '^' and_expression	{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = '^';}
 	;
 
 inclusive_or_expression
 	: exclusive_or_expression	{$$ = $1;}
-	| inclusive_or_expression '|' exclusive_or_expression		{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = '|';}
+	| inclusive_or_expression '|' exclusive_or_expression		{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = '|';}
 	;
 
 logical_and_expression
 	: inclusive_or_expression	{$$ = $1;}
-	| logical_and_expression AND_OP inclusive_or_expression		{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = AND_OP;}
+	| logical_and_expression AND_OP inclusive_or_expression		{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = AND_OP;}
 	;
 
 logical_or_expression
 	: logical_and_expression	{$$ = $1;}
-	| logical_or_expression OR_OP logical_and_expression		{$$ = NewExpNode(OpK,$1,$3);$$->attr.op = OR_OP;}
+	| logical_or_expression OR_OP logical_and_expression		{$$ = NewExpNode(TruthValueK,$1,$3);$$->attr.op = OR_OP;}
 	;
 
 conditional_expression
 	: logical_or_expression		{$$ = $1;}
-	| logical_or_expression '?' expression ':' conditional_expression	{$$ = NewExpNode(OpK,$1,$3,$5);$$->attr.op = '?';}
+	| logical_or_expression '?' expression ':' conditional_expression	{$$ = NewExpNode(TruthValueK,$1,$3,$5);$$->attr.op = '?';}
 	;
 
 assignment_expression
@@ -608,18 +659,18 @@ declarator
 direct_declarator
 	: IDENTIFIER	{$1 = NewExpNode(IdK);$1->attr.name = idVector[index];$$ = NewStmtNode(DirectDeclaratorK,$1);}
 	| '(' declarator ')'	{$$ = $2;}
-	| direct_declarator '[' constant_expression ']'	{$$ = NewStmtNode(DirectDeclaratorK,$1,$3);}
-	| direct_declarator '[' ']'	{$$ = $1;}
+	| direct_declarator '[' constant_expression ']'	{$$ = NewStmtNode(ArrayK,$1,$3);}
+	| direct_declarator '[' ']'	{$$ = NewStmtNode(ArrayK,$1);}
 	| direct_declarator '(' parameter_type_list ')'	{$$ = NewStmtNode(DirectDeclaratorK,$1,$3);}
 	| direct_declarator '(' identifier_list ')'	{$$ = NewStmtNode(DirectDeclaratorK,$1,$3);}
 	| direct_declarator '(' ')'		{$$ = $1;}
 	;
 
 pointer
-	: '*'	{$$ = NewExpNode(PointK);$$->attr.op = '*';}
-	| '*' type_qualifier_list	{$$ = NewExpNode(PointK,$2);$$->attr.op = '*';}
-	| '*' pointer		{$$ = NewExpNode(PointK,$2);$$->attr.op = '*';}
-	| '*' type_qualifier_list pointer	{$$ = NewExpNode(PointK,$2,$3);$$->attr.op = '*';}
+	: '*'	{$$ = NewExpNode(PointK);SetType($$,"*");$$->attr.op = '*';}
+	| '*' type_qualifier_list	{$$ = NewExpNode(PointK,$2);SetType($$,"*");$$->attr.op = '*';}
+	| '*' pointer		{$$ = NewExpNode(PointK,$2);SetType($$,"*");$$->attr.op = '*';}
+	| '*' type_qualifier_list pointer	{$$ = NewExpNode(PointK,$2,$3);SetType($$,"*");$$->attr.op = '*';}
 	;
 
 type_qualifier_list
@@ -1040,6 +1091,14 @@ void PrintNode(TreeNode* node)
             	cout<<" ";
             	break;
             }
+            case ArrayK:
+            {
+            	cout.width(20);
+            	cout<<"Array Declarator";
+            	cout.width(20);
+            	cout<<" ";
+            	break;
+            }
             case TypeQualifierListK:
             {
             	cout.width(20);
@@ -1200,6 +1259,26 @@ void PrintNode(TreeNode* node)
 				cout<<node->attr.val;
 				break;
             }
+            case FConstantK:
+            {
+            	cout.width(20);
+            	cout<<"Constant";
+            	cout.width(10);
+            	cout<<"value:";
+            	cout.width(10);
+            	cout<<node->attr.f_val;
+            	break;
+            }
+            case CConstantK:
+            {
+            	cout.width(20);
+            	cout<<"Constant";
+            	cout.width(10);
+            	cout<<"value:";
+            	cout.width(10);
+            	cout<<node->attr.c_val;
+            	break;
+            }
             case IdK:
             {
             
@@ -1245,7 +1324,7 @@ void PrintNode(TreeNode* node)
 				cout.width(10);
 				cout<<"symbol:";
 				cout.width(10);
-				cout<<node->attr.op;
+				cout<<char(node->attr.op);
 				break;
             }
             case StringK:
@@ -1328,13 +1407,14 @@ void PrintNode(TreeNode* node)
 				cout<<node->type;
 				break;
 			}
-			case MainK:
+			case TruthValueK:
 			{
 				cout.width(20);
-				cout<<"Main";
+				cout<<"Truth Value Expression";
 				cout.width(10);
-				cout<<"symbol:";
-				cout<<"main";
+				cout<<"op:";
+				cout.width(10);
+				PrintOP(node->attr.op);
 				break;
 			}
             default :
@@ -1367,12 +1447,15 @@ void traverse(TreeNode* root)
 	if (root == NULL){
 		return;
 	}
+	checkType(root);
 	for (int i=0;i<MAXCHILDREN;i++){
 		if (root->child[i] != NULL){
 			traverse(root->child[i]);
 		} else{
 			if (root->nodekind == ExpK && root->kind.exp == IdK){
-				if (traverseIDs(root)){
+				string type = "";
+				if (traverseIDs(root,type)){
+					cout << type <<endl;
 					PrintNode(root);
 					return;
 				} else {
@@ -1435,7 +1518,8 @@ void PrintOP(int op)
      case '[':cout<<"[";break;
      default : cout<<"other";
   }
-}
+};
+
 void SetType(TreeNode* node,char* type)
 {
     node->type=type;
@@ -1445,7 +1529,160 @@ void SetType(TreeNode* node,char* type)
         node->child[i]->type=type;
         i++;
     }
-}
+};
+
+int checkOperandType(TreeNode* node)
+{
+	if (node == NULL){
+		return -1;
+	}
+	if (node->nodekind == ExpK && node->kind.exp == ConstantK){
+		return (CONSTVALUE + INTVALUE);
+	} else if (node->nodekind == ExpK && node->kind.exp == FConstantK){
+		return (CONSTVALUE + FLOATVALUE);
+	} else if (node->nodekind == ExpK && node->kind.exp == CConstantK){
+		return (CONSTVALUE + CHARVALUE);
+	} else if (node->nodekind == ExpK && node->kind.exp == IdK){
+		string type = "";
+		traverseIDs(node,type);
+		return calculateType(type);
+	} else if(node->nodekind == ExpK && node->kind.exp == OpK  && node->child[0] && node->child[1] == NULL){//单目运算
+		int check = checkOperandType(node->child[0]);
+		if (check < 0){
+			return check;
+		} else if (check >= POINTERVALUE && check != CONSTVALUE + CHARVALUE && check != CONSTVALUE + INTVALUE && check != CONSTVALUE + FLOATVALUE){//指针类型
+			if (node->attr.op != '&' && node->attr.op != '*'){
+				return -(node->lineno);
+			}
+			return check;
+		} else if (check == INTVALUE || check == CHARVALUE){//整形和字符型只有取值符号不支持
+			if (node->attr.op == '*'){
+				return -(node->lineno);
+			}
+			return check;
+		} else if (check == FLOATVALUE){//浮点型只支持取地址
+			if (node->attr.op != '&'){
+				return -(node->lineno);
+			}
+			return check;
+		} else if (check == CONSTVALUE + CHARVALUE || check == CONSTVALUE + INTVALUE || check == CONSTVALUE + FLOATVALUE){
+			if (node->attr.op != '&'){
+				return -(node->lineno); 
+			}
+			return check;
+		}
+	} else if (node->nodekind == ExpK && node->kind.exp == OpK  && node->child[0] && node->child[1]){//双目运算
+		int check1 = checkOperandType(node->child[0]);
+		int check2 = checkOperandType(node->child[1]);
+		if (check1 < 0 || check2 < 0){
+			return std::max(check1,check2);
+		} else {
+			if ((check1 >= POINTERVALUE && check1 != CONSTVALUE + CHARVALUE && check1 != CONSTVALUE + INTVALUE && check1 != CONSTVALUE + FLOATVALUE) || (check1 >= POINTERVALUE && check1 != CONSTVALUE + CHARVALUE && check1 != CONSTVALUE + INTVALUE && check1 != CONSTVALUE + FLOATVALUE)){//指针类型做运算
+				return -(node->lineno);
+			} else if ((check2 == FLOATVALUE || check2 == CONSTVALUE + FLOATVALUE) && (node->attr.op == '%' || node->attr.op == LEFT_OP || node->attr.op == RIGHT_OP)){//浮点型
+				return -(node->lineno);
+			} else if ((check1 == FLOATVALUE || check1 == CONSTVALUE + FLOATVALUE) && (node->attr.op == '%' || node->attr.op == LEFT_OP || node->attr.op == RIGHT_OP)){
+				return -(node->lineno);
+			} else {
+				if (check1 >= CONSTVALUE){
+					check1 -= CONSTVALUE;
+				}
+				if (check2 >= CONSTVALUE){
+					check2 -= CONSTVALUE;
+				} 
+				return max(check1,check2);
+			}
+		}
+	} else if (node->nodekind == ExpK && node->kind.exp == AssignmentK){
+		if (node->attr.op == '='){
+			int check1 = checkOperandType(node->child[0]);
+			int check2 = checkOperandType(node->child[1]);
+			if (!(check1 == check2 - CONSTVALUE || (check1 >= check2) && (check1 < check2 + CONSTVALUE))){
+			//只能静态变量赋值给非静态，低精度赋值给高精度
+				return -(node->lineno);
+			}
+			return check1;
+		} else if (node->attr.op == ADD_ASSIGN || node->attr.op == SUB_ASSIGN || node->attr.op == MUL_ASSIGN || node->attr.op == DIV_ASSIGN){
+			int check1 = checkOperandType(node->child[0]);
+			int check2 = checkOperandType(node->child[1]);
+			if (!(check1 == check2 - CONSTVALUE || (check1 >= check2) && (check1 < check2 + CONSTVALUE))){
+				return -(node->lineno);
+			}
+			return check1;
+		} else if (node->attr.op == MOD_ASSIGN || node->attr.op == LEFT_ASSIGN || node->attr.op == RIGHT_ASSIGN || node->attr.op == XOR_ASSIGN || node->attr.op == OR_ASSIGN || node->attr.op == AND_ASSIGN){
+			int check1 = checkOperandType(node->child[0]);
+			int check2 = checkOperandType(node->child[1]);
+			if (!(check1 == INTVALUE && (check2 == INTVALUE || check2 == (INTVALUE + CONSTVALUE)))){
+				return -(node->lineno);
+			}
+			return check1;
+		}
+	} else if (node->nodekind == ExpK && node->kind.exp == PostfixK){
+		if (node->attr.op == INC_OP || node->attr.op == DEC_OP){//后置单目加减
+			int check = checkOperandType(node->child[0]);
+			if (check >= POINTERVALUE || check == CONSTVALUE + CHARVALUE || check == CONSTVALUE + INTVALUE || check == CONSTVALUE + FLOATVALUE){//指针或者常量类型
+				return -(node->lineno);
+			}
+			return check;
+		} else if (node->attr.op == '['){
+			int check1 = checkOperandType(node->child[0]);
+			int check2 = checkOperandType(node->child[1]);
+			if (check1 < 0 || check2 < 0){
+				return -1;
+			} else if (check2 != INTVALUE && check2 != CONSTVALUE + INTVALUE){
+				return -(node->lineno);
+			} else if (!(check1 >= POINTERVALUE && check1 != CONSTVALUE + CHARVALUE && check1 != CONSTVALUE + INTVALUE && check1 != CONSTVALUE + FLOATVALUE)){
+				return -(node->lineno);
+			}
+			return (check1 - POINTERVALUE);
+		} 
+	}
+};
+
+void checkType(TreeNode* node)
+{
+	if (node->nodekind == StmtK){// 该节点为语句类型
+		if(node->kind.stmt == IfK || node->kind.stmt == WhileK || node->kind.stmt == SwitchK) {// if while switch语句第一个子节点要求是真值表达式
+			if (!(node->child[0] && (node->child[0]->kind).exp == TruthValueK)){
+				//语句的第一个子节点不存在或者不是真值表达式，提示异常
+				cout << "Bad boolean type at line :" << node->lineno << endl;
+			} 
+		} else if (node->kind.stmt == DowhileK){
+			if (!(node->child[1] && (node->child[1]->kind).exp == TruthValueK)){
+				cout << "Bad boolean type at line :" << node->lineno << endl;
+			}
+		} else if (node->kind.stmt == ForK){
+			if (!(node->child[1] && ((node->child[1]->kind).exp == TruthValueK || (node->child[1]->kind).exp == EmptyK))){// if条件句的第二个表达式要求为真值表达式或者为空表达式
+				cout << "Bad boolean type at line :" << node->lineno << endl;
+			}
+		}
+	} else if (node->nodekind == ExpK){//节点类型为表达式类型
+		if (node->kind.exp == OpK){
+			int check = checkOperandType(node);
+			if (check < 0){
+				cout << "Type error at line:" << -check << endl;
+			} else {
+				cout << "line:" << node->lineno << " " << "type:" << check << endl;
+			}
+		} else if (node->kind.exp == AssignmentK){//赋值语句
+			int check = checkOperandType(node);
+			if (check < 0){
+				cout << "Type error at line:" << -check << endl;
+			} else {
+				cout << "line:" << node->lineno << " " << "type:" << check << endl;
+			}
+		} else if (node->kind.exp == PostfixK){
+			int check = checkOperandType(node);
+			if (check < 0){
+				cout << "Type error at line:" << -check << endl;
+			} else {
+				cout << "line:" << node->lineno << " " << "type:" << check << endl;
+			}
+		}
+	} else {
+		return;
+	}
+};
 int main()
 {
 	int n = 1;
