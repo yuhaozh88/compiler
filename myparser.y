@@ -326,28 +326,28 @@ int calculateType(string type)
 	if (check != string::npos){
 		score += CONSTVALUE;
 	}
-	cout << score << " " ;
+	//cout << score << " " ;
 	check = type.find(Float);
 	if (check != string::npos){
 		score += FLOATVALUE;
 	}
-	cout << score << " " ;
+	//cout << score << " " ;
 	check = type.find(Int);
 	if (check != string::npos){
 		score += INTVALUE;
 	}
-	cout << score << " " ;
+	//cout << score << " " ;
 	check = type.find(Char);
 	if (check != string::npos){
 		score += CHARVALUE;
 	}
-	cout << score << " " ;
+	//cout << score << " " ;
 	int times = getTimes(type,Pointer);
 	score += times * POINTERVALUE;
-	cout << score << " " ;
+	//cout << score << " " ;
 	times = getTimes(type,Array);
 	score += times * POINTERVALUE;
-	cout << score << " " ;
+	//cout << score << " " ;
 	return score;
 
 };
@@ -1546,19 +1546,22 @@ void getParamsList(TreeNode* root, vector<int>& list)
 		if (root->child[i]){
 			getParamsList(root->child[i],list);
 		} else {
-			if (root->nodekind == ExpK && root->kind.exp == IdK){
-				string type = "";
-				traverseIDs(root,type);
-				int score = calculateType(type);
-				list.push_back(score);
-			} else if (root->nodekind == ExpK && root->kind.exp == ConstantK){
-				list.push_back(CONSTVALUE + INTVALUE);
-			} else if (root->nodekind == ExpK && root->kind.exp == FConstantK){
-				list.push_back(CONSTVALUE + FLOATVALUE);
-			} else if (root->nodekind == ExpK && root->kind.exp == CConstantK){
-				list.push_back(CONSTVALUE + CHARVALUE);
-			}
+			break;
 		}
+	}
+	if (root->nodekind == ExpK && root->kind.exp == IdK){
+		string type = "";
+		traverseIDs(root,type);
+		int score = calculateType(type);
+		list.push_back(score);
+	} else if (root->nodekind == ExpK && root->kind.exp == ConstantK){
+		list.push_back(CONSTVALUE + INTVALUE);
+	} else if (root->nodekind == ExpK && root->kind.exp == FConstantK){
+		list.push_back(CONSTVALUE + FLOATVALUE);
+	} else if (root->nodekind == ExpK && root->kind.exp == CConstantK){
+		list.push_back(CONSTVALUE + CHARVALUE);
+	} else {
+		return ;
 	}
 };
 
@@ -1684,6 +1687,7 @@ int checkOperandType(TreeNode* node)
 			}
 			string name = node->child[0]->attr.name;//从全局函数表中获取函数名
 			string type = it->second;//从全局变量中获取函数的参数信息
+			cout << type << endl;
 			int index = type.find('/');
 			string returnType = type.substr(0,index-1);
 			string paramsType = "";
@@ -1692,6 +1696,7 @@ int checkOperandType(TreeNode* node)
 				if (type[i] != ' '){
 					paramsType += type[i];
 				} else {
+					cout << paramsType << endl;
 					paramsList.push_back(paramsType);
 					paramsType = "";
 				}
